@@ -1,0 +1,975 @@
+/* ==========================================================================
+   MQTT 感測器溫度計儀表板 - 高級現代玻璃擬態風格 (Modern Glassmorphism Design)
+   ========================================================================== */
+
+:root {
+  /* 主色調調配 (HSL Tailored Colors) */
+  --bg-primary: #0a0e17;
+  --bg-secondary: #101726;
+  --card-bg: rgba(18, 25, 41, 0.72);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-border-glow: rgba(56, 189, 248, 0.25);
+  --card-hover-border: rgba(56, 189, 248, 0.45);
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  /* 溫度色彩 (動態階層) */
+  --temp-cold: #38bdf8;         /* 冰藍 <20°C */
+  --temp-normal: #34d399;       /* 翠綠 20~27°C */
+  --temp-warm: #fbbf24;         /* 琥珀 28~32.9°C */
+  --temp-alarm: #f43f5e;        /* 烈焰紅 >=33°C */
+
+  --liquid-gradient: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  --bulb-glow: rgba(56, 189, 248, 0.45);
+
+  /* 輔助標誌色 */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* 玻璃質感 */
+  --glass-reflection: linear-gradient(90deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,0.2) 100%);
+
+  /* 字型定義 */
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* 圓角與陰影 */
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --shadow-card: 0 16px 40px -10px rgba(0, 0, 0, 0.55), 0 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+/* 全域重置與基礎樣式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 背景光暈環境光 */
+.background-decorations {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.22;
+  transition: all 1.2s ease;
+}
+
+.glow-1 {
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, #0284c7 0%, transparent 70%);
+  top: -120px;
+  left: 10%;
+  animation: floatGlow 18s ease-in-out infinite alternate;
+}
+
+.glow-2 {
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+  bottom: -150px;
+  right: 5%;
+  animation: floatGlow 22s ease-in-out infinite alternate-reverse;
+}
+
+.glow-3 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, #ec4899 0%, transparent 70%);
+  top: 40%;
+  left: 45%;
+  opacity: 0.12;
+}
+
+@keyframes floatGlow {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(60px, 40px) scale(1.1); }
+  100% { transform: translate(-40px, 80px) scale(0.95); }
+}
+
+/* 主容器 */
+.app-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ==========================================================================
+   頂部 Header
+   ========================================================================== */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.header-branding {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px -4px rgba(56, 189, 248, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  color: #38bdf8;
+  filter: drop-shadow(0 2px 6px rgba(56, 189, 248, 0.6));
+}
+
+.header-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 連線狀態膠囊標籤 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--card-border);
+  transition: all 0.3s ease;
+}
+
+.status-pill.connected {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.status-pill.connecting {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.status-pill.disconnected {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  box-shadow: 0 0 10px currentColor;
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* 按鈕風格 */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(10px);
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.action-btn-primary {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(37, 99, 235, 0.3));
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.action-btn-primary:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(37, 99, 235, 0.5));
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.3);
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.unit-text {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.unit-text.active {
+  opacity: 1;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.unit-divider {
+  opacity: 0.3;
+}
+
+/* ==========================================================================
+   概覽統計區塊 (Overview Section)
+   ========================================================================== */
+.overview-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.25s ease, border-color 0.25s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon-wrap svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-temp {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.icon-max {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.icon-alarm {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+  transition: all 0.3s;
+}
+
+.icon-alarm.active {
+  background: rgba(244, 63, 94, 0.35);
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.6);
+  animation: pulseAlarm 1s infinite alternate;
+}
+
+.icon-broker {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stat-number {
+  font-family: var(--font-mono);
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-main);
+}
+
+.stat-unit {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.stat-footer {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.stat-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stat-badge.safe {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.stat-badge.alarm-triggered {
+  background: rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+}
+
+.stat-broker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.broker-row {
+  display: flex;
+  gap: 6px;
+}
+
+.b-label {
+  color: var(--text-dim);
+}
+
+.b-val {
+  color: #a5b4fc;
+}
+
+/* ==========================================================================
+   感測器網格與卡片 (Sensor Cards & Thermometer)
+   ========================================================================== */
+.sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 28px;
+}
+
+.sensor-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-card);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.sensor-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--card-border-glow), transparent);
+  transition: all 0.4s ease;
+}
+
+.sensor-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--card-hover-border);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+.sensor-card.in-alarm {
+  border-color: rgba(244, 63, 94, 0.5);
+  box-shadow: 0 20px 45px -10px rgba(244, 63, 94, 0.25), 0 0 25px rgba(244, 63, 94, 0.2);
+}
+
+.sensor-card.in-alarm::before {
+  background: linear-gradient(90deg, transparent, #f43f5e, transparent);
+  height: 4px;
+  animation: alarmBorderGlow 1.2s infinite alternate;
+}
+
+@keyframes alarmBorderGlow {
+  0% { opacity: 0.6; filter: drop-shadow(0 0 4px #f43f5e); }
+  100% { opacity: 1; filter: drop-shadow(0 0 12px #f43f5e); }
+}
+
+/* 卡片頭部 */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.device-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.device-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.device-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+}
+
+.status-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+}
+
+.status-tag.online {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-tag.offline {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.alarm-banner {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(244, 63, 94, 0.18);
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  animation: pulseAlarm 1.2s infinite alternate;
+}
+
+.alarm-banner.active {
+  display: flex;
+}
+
+@keyframes pulseAlarm {
+  0% { transform: scale(0.98); opacity: 0.85; }
+  100% { transform: scale(1.02); opacity: 1; }
+}
+
+/* ==========================================================================
+   溫度計實體設計 (Realistic 3D Thermometer Display)
+   ========================================================================== */
+.thermometer-showcase {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 10px 0;
+}
+
+/* 溫度計外殼 */
+.thermometer-wrapper {
+  flex-shrink: 0;
+  padding: 12px 14px 16px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 28px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.thermometer-glass {
+  position: relative;
+  width: 90px;
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 刻度標記與數字 */
+.scale-ticks {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 48px;
+  width: 32px;
+  pointer-events: none;
+}
+
+.scale-mark {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  transform: translateY(50%);
+  gap: 4px;
+}
+
+.mark-val {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-weight: 500;
+  width: 22px;
+  text-align: right;
+}
+
+.tick {
+  width: 6px;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 1px;
+}
+
+.tick.major {
+  width: 8px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* 33度告警刻度線 */
+.alarm-mark .mark-val {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.alarm-mark .alarm-tick {
+  width: 12px;
+  height: 2px;
+  background: #f43f5e;
+  box-shadow: 0 0 6px #f43f5e;
+}
+
+/* 玻璃管幹身 (Stem) */
+.thermometer-stem {
+  position: absolute;
+  right: 18px;
+  top: 14px;
+  bottom: 46px;
+  width: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px 10px 0 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-bottom: none;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* 玻璃反光紋理 */
+.stem-reflection {
+  position: absolute;
+  inset: 0;
+  background: var(--glass-reflection);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* 水銀液軌 */
+.stem-liquid-track {
+  position: absolute;
+  bottom: 0;
+  left: 3px;
+  right: 3px;
+  top: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* 液柱高度 (動態平滑動畫) */
+.stem-liquid {
+  width: 100%;
+  background: var(--liquid-gradient);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.8s cubic-bezier(0.34, 1.3, 0.64, 1), background 0.6s ease;
+  position: relative;
+  box-shadow: 0 0 16px var(--bulb-glow);
+}
+
+/* 彎月面 (Meniscus) */
+.meniscus {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border-radius: 50% 50% 0 0;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* 水銀儲液球 (Bulb) */
+.thermometer-bulb {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.7), 0 4px 16px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.bulb-liquid {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #93c5fd 0%, #0284c7 60%, #0369a1 100%);
+  box-shadow: 0 0 20px var(--bulb-glow);
+  position: relative;
+  transition: all 0.6s ease;
+}
+
+.bulb-reflection {
+  position: absolute;
+  top: 5px;
+  left: 7px;
+  width: 9px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  transform: rotate(-35deg);
+}
+
+/* ==========================================================================
+   側邊遙測讀數區 (Telemetry Readouts)
+   ========================================================================== */
+.telemetry-readouts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.primary-temp-display {
+  display: flex;
+  flex-direction: column;
+}
+
+.temp-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.temp-huge-num {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-main);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  transition: color 0.4s ease;
+}
+
+.temp-huge-unit {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.temp-sub-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+.temp-sub-stat strong {
+  color: var(--text-main);
+}
+
+.divider {
+  opacity: 0.25;
+}
+
+/* 次要數據條 (濕度 & 電壓) */
+.aux-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.aux-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aux-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.aux-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.hum-icon { color: #38bdf8; }
+.volt-icon { color: #a78bfa; }
+
+.aux-value {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.aux-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.aux-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+.hum-fill {
+  background: linear-gradient(90deg, #38bdf8, #0284c7);
+}
+
+.volt-fill {
+  background: linear-gradient(90deg, #a78bfa, #818cf8);
+}
+
+/* ==========================================================================
+   歷史走勢圖 (Historical Sparkline Chart)
+   ========================================================================== */
+.history-chart-wrapper {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.chart-seq {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #818cf8;
+}
+
+.sparkline-canvas {
+  width: 100%;
+  height: 65px;
+  display: block;
+}
+
+/* 卡片底端更新狀態 */
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+  font-family: var(--font-mono);
+}
+
+/* ==========================================================================
+   底部資訊 (Dashboard Footer)
+   ========================================================================== */
+.dashboard-footer {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+
+.footer-info {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dot-separator {
+  opacity: 0.3;
+}
+
+/* ==========================================================================
+   RWD 響應式優化
+   ========================================================================== */
+@media (max-width: 900px) {
+  .app-container {
+    padding: 20px 16px;
+  }
+  .sensors-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .thermometer-showcase {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .thermometer-wrapper {
+    align-self: center;
+  }
+  .temp-huge-num {
+    font-size: 2.5rem;
+  }
+}

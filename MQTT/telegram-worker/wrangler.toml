@@ -1,0 +1,23 @@
+name = "xiaomi-telegram"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+CHAT_ID = "6692321889"
+MQTT_HOST = "broker.emqx.io"
+MQTT_PORT = "1883"
+TOPIC = "ble/esp32-eth-ble-mqtt-x4-2c8628/raw/A4C1384A09DE"
+INTERVAL_MS = "5000"
+STALE_SEC = "60"
+
+[[durable_objects.bindings]]
+name = "TICKER"
+class_name = "Ticker"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Ticker"]
+
+# 每分鐘保活一次：確保 Durable Object 的 5 秒計時器持續運作
+[triggers]
+crons = ["* * * * *"]

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="即時 MQTT 感測器溫度計儀表板，支援即時水銀溫度計動畫、溫濕度與電壓監控、告警狀態與歷史走勢圖。">
+  <title>MQTT 感測器即時溫度儀表板 - Sensor Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="mqtt.min.js"></script>
+</head>
+<body>
+  <div class="background-decorations">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- 頂部 Header -->
+    <header class="dashboard-header">
+      <div class="header-branding">
+        <div class="logo-badge">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="header-title">MQTT 感測器溫度監控中心</h1>
+          <p class="header-subtitle">即時 3 軸感測裝置水銀柱溫度計與遙測數據狀態</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- 連線狀態徽章 -->
+        <div id="connection-status-pill" class="status-pill connecting">
+          <span class="status-dot"></span>
+          <span id="connection-status-text">連線中...</span>
+        </div>
+
+        <!-- 單位切換 -->
+        <button id="unit-toggle-btn" class="action-btn" title="切換溫標 (°C / °F)">
+          <span class="unit-text active" id="unit-c-label">°C</span>
+          <span class="unit-divider">/</span>
+          <span class="unit-text" id="unit-f-label">°F</span>
+        </button>
+
+        <!-- 警報音效開關 -->
+        <button id="sound-toggle-btn" class="action-btn" title="警報音效開關">
+          <svg id="sound-icon-on" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          <svg id="sound-icon-off" class="btn-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <span id="sound-text">警報音效</span>
+        </button>
+
+        <!-- 重新連線 -->
+        <button id="reconnect-btn" class="action-btn action-btn-primary" title="重新連線 MQTT">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          <span>重新連線</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 概覽數據看板 (Summary Cards) -->
+    <section class="overview-section" aria-label="系統總覽">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">平均溫度</span>
+          <span class="stat-icon-wrap icon-temp">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+            </svg>
+          </span>
+        </div>
+        <div class="stat-value-row">
+          <span id="stat-avg-temp" class="stat-number">--</span>
+          <span class="stat-unit" id="stat-avg-unit">°C</span>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-badge">3 裝置實時平均</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">最高當前溫度</span>
+          <span class="stat-icon-wrap icon-max">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </span>
+        </div>
+        <div class="stat-value-row">
+          <span id="stat-max-temp" class="stat-number">--</span>
+          <span class="stat-unit" id="stat-max-unit">°C</span>
+        </div>
+        <div class="stat-footer">
+          <span id="stat-max-device" class="stat-hint">--</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">告警狀態</span>
+          <span class="stat-icon-wrap icon-alarm" id="alarm-icon-container">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </span>
+        </div>
+        <div class="stat-value-row">
+          <span id="stat-alarm-count" class="stat-number">0</span>
+          <span class="stat-unit">個警報</span>
+        </div>
+        <div class="stat-footer">
+          <span id="stat-alarm-detail" class="stat-badge safe">全系統正常</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Broker 資訊</span>
+          <span class="stat-icon-wrap icon-broker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </span>
+        </div>
+        <div class="stat-broker-info">
+          <div class="broker-row"><span class="b-label">Host:</span> <span class="b-val" id="broker-host-val">broker.emqx.io</span></div>
+          <div class="broker-row"><span class="b-label">Topic:</span> <span class="b-val" id="broker-topic-val">pspasia/test1/#</span></div>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-hint">封包接收數：<strong id="stat-total-packets">0</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 主展示區：三個感測器溫度計卡片 -->
+    <main class="sensors-grid" id="sensors-container">
+      <!-- Sensor 01 卡片 -->
+      <article class="sensor-card" id="card-sensor-01">
+        <div class="card-header">
+          <div class="device-meta">
+            <div class="device-indicator">
+              <span class="status-pulse-dot" id="dot-sensor-01"></span>
+              <span class="device-name">sensor-01</span>
+            </div>
+            <span class="status-tag online" id="status-tag-sensor-01">ONLINE</span>
+          </div>
+          <div class="alarm-banner" id="alarm-banner-sensor-01">
+            <span class="alarm-icon">🔥</span>
+            <span class="alarm-text">高溫告警 (&gt;33°C)</span>
+          </div>
+        </div>
+
+        <div class="thermometer-showcase">
+          <!-- 溫度計實體容器 -->
+          <div class="thermometer-wrapper" id="thermo-wrapper-sensor-01">
+            <div class="thermometer-glass">
+              <!-- 刻度標記區 -->
+              <div class="scale-ticks">
+                <div class="scale-mark" style="bottom: 100%"><span class="mark-val">50°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 83.3%"><span class="mark-val">40°</span><span class="tick major"></span></div>
+                <div class="scale-mark alarm-mark" style="bottom: 71.6%"><span class="mark-val alarm-text">33° ⚠</span><span class="tick alarm-tick"></span></div>
+                <div class="scale-mark" style="bottom: 66.6%"><span class="mark-val">30°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 50%"><span class="mark-val">20°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 33.3%"><span class="mark-val">10°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 16.6%"><span class="mark-val">0°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 0%"><span class="mark-val">-10°</span><span class="tick major"></span></div>
+              </div>
+
+              <!-- 玻璃管與水銀液柱 -->
+              <div class="thermometer-stem">
+                <div class="stem-reflection"></div>
+                <div class="stem-liquid-track">
+                  <div class="stem-liquid" id="liquid-sensor-01" style="height: 50%;">
+                    <div class="meniscus"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 水銀儲液球 (Bulb) -->
+              <div class="thermometer-bulb">
+                <div class="bulb-liquid" id="bulb-sensor-01">
+                  <div class="bulb-reflection"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 側邊數位儀表與數值 -->
+          <div class="telemetry-readouts">
+            <div class="primary-temp-display">
+              <span class="temp-label">當前溫度</span>
+              <div class="temp-huge-num">
+                <span id="temp-val-sensor-01">--</span>
+                <span class="temp-huge-unit" id="temp-unit-sensor-01">°C</span>
+              </div>
+              <div class="temp-sub-stat">
+                <span>最高: <strong id="max-t-sensor-01">--</strong></span>
+                <span class="divider">|</span>
+                <span>最低: <strong id="min-t-sensor-01">--</strong></span>
+              </div>
+            </div>
+
+            <!-- 次要數據項目 -->
+            <div class="aux-metrics-grid">
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon hum-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                  </svg>
+                  <span>相對濕度</span>
+                </div>
+                <div class="aux-value" id="hum-val-sensor-01">-- %</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill hum-fill" id="hum-bar-sensor-01" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon volt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="16" height="10" rx="2" ry="2"/>
+                    <line x1="22" y1="11" x2="22" y2="13"/>
+                  </svg>
+                  <span>工作電壓</span>
+                </div>
+                <div class="aux-value" id="volt-val-sensor-01">-- V</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill volt-fill" id="volt-bar-sensor-01" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 歷史走勢圖 -->
+        <div class="history-chart-wrapper">
+          <div class="chart-header">
+            <span class="chart-title">即時溫度趨勢走勢 (近 30 筆)</span>
+            <span class="chart-seq" id="seq-sensor-01">Seq: --</span>
+          </div>
+          <canvas id="chart-sensor-01" class="sparkline-canvas" width="400" height="75"></canvas>
+        </div>
+
+        <div class="card-footer">
+          <span class="update-time" id="time-sensor-01">等待連線封包...</span>
+        </div>
+      </article>
+
+      <!-- Sensor 02 卡片 -->
+      <article class="sensor-card" id="card-sensor-02">
+        <div class="card-header">
+          <div class="device-meta">
+            <div class="device-indicator">
+              <span class="status-pulse-dot" id="dot-sensor-02"></span>
+              <span class="device-name">sensor-02</span>
+            </div>
+            <span class="status-tag online" id="status-tag-sensor-02">ONLINE</span>
+          </div>
+          <div class="alarm-banner" id="alarm-banner-sensor-02">
+            <span class="alarm-icon">🔥</span>
+            <span class="alarm-text">高溫告警 (&gt;33°C)</span>
+          </div>
+        </div>
+
+        <div class="thermometer-showcase">
+          <div class="thermometer-wrapper" id="thermo-wrapper-sensor-02">
+            <div class="thermometer-glass">
+              <div class="scale-ticks">
+                <div class="scale-mark" style="bottom: 100%"><span class="mark-val">50°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 83.3%"><span class="mark-val">40°</span><span class="tick major"></span></div>
+                <div class="scale-mark alarm-mark" style="bottom: 71.6%"><span class="mark-val alarm-text">33° ⚠</span><span class="tick alarm-tick"></span></div>
+                <div class="scale-mark" style="bottom: 66.6%"><span class="mark-val">30°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 50%"><span class="mark-val">20°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 33.3%"><span class="mark-val">10°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 16.6%"><span class="mark-val">0°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 0%"><span class="mark-val">-10°</span><span class="tick major"></span></div>
+              </div>
+
+              <div class="thermometer-stem">
+                <div class="stem-reflection"></div>
+                <div class="stem-liquid-track">
+                  <div class="stem-liquid" id="liquid-sensor-02" style="height: 50%;">
+                    <div class="meniscus"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="thermometer-bulb">
+                <div class="bulb-liquid" id="bulb-sensor-02">
+                  <div class="bulb-reflection"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="telemetry-readouts">
+            <div class="primary-temp-display">
+              <span class="temp-label">當前溫度</span>
+              <div class="temp-huge-num">
+                <span id="temp-val-sensor-02">--</span>
+                <span class="temp-huge-unit" id="temp-unit-sensor-02">°C</span>
+              </div>
+              <div class="temp-sub-stat">
+                <span>最高: <strong id="max-t-sensor-02">--</strong></span>
+                <span class="divider">|</span>
+                <span>最低: <strong id="min-t-sensor-02">--</strong></span>
+              </div>
+            </div>
+
+            <div class="aux-metrics-grid">
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon hum-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                  </svg>
+                  <span>相對濕度</span>
+                </div>
+                <div class="aux-value" id="hum-val-sensor-02">-- %</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill hum-fill" id="hum-bar-sensor-02" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon volt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="16" height="10" rx="2" ry="2"/>
+                    <line x1="22" y1="11" x2="22" y2="13"/>
+                  </svg>
+                  <span>工作電壓</span>
+                </div>
+                <div class="aux-value" id="volt-val-sensor-02">-- V</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill volt-fill" id="volt-bar-sensor-02" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="history-chart-wrapper">
+          <div class="chart-header">
+            <span class="chart-title">即時溫度趨勢走勢 (近 30 筆)</span>
+            <span class="chart-seq" id="seq-sensor-02">Seq: --</span>
+          </div>
+          <canvas id="chart-sensor-02" class="sparkline-canvas" width="400" height="75"></canvas>
+        </div>
+
+        <div class="card-footer">
+          <span class="update-time" id="time-sensor-02">等待連線封包...</span>
+        </div>
+      </article>
+
+      <!-- Sensor 03 卡片 -->
+      <article class="sensor-card" id="card-sensor-03">
+        <div class="card-header">
+          <div class="device-meta">
+            <div class="device-indicator">
+              <span class="status-pulse-dot" id="dot-sensor-03"></span>
+              <span class="device-name">sensor-03</span>
+            </div>
+            <span class="status-tag online" id="status-tag-sensor-03">ONLINE</span>
+          </div>
+          <div class="alarm-banner" id="alarm-banner-sensor-03">
+            <span class="alarm-icon">🔥</span>
+            <span class="alarm-text">高溫告警 (&gt;33°C)</span>
+          </div>
+        </div>
+
+        <div class="thermometer-showcase">
+          <div class="thermometer-wrapper" id="thermo-wrapper-sensor-03">
+            <div class="thermometer-glass">
+              <div class="scale-ticks">
+                <div class="scale-mark" style="bottom: 100%"><span class="mark-val">50°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 83.3%"><span class="mark-val">40°</span><span class="tick major"></span></div>
+                <div class="scale-mark alarm-mark" style="bottom: 71.6%"><span class="mark-val alarm-text">33° ⚠</span><span class="tick alarm-tick"></span></div>
+                <div class="scale-mark" style="bottom: 66.6%"><span class="mark-val">30°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 50%"><span class="mark-val">20°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 33.3%"><span class="mark-val">10°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 16.6%"><span class="mark-val">0°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 0%"><span class="mark-val">-10°</span><span class="tick major"></span></div>
+              </div>
+
+              <div class="thermometer-stem">
+                <div class="stem-reflection"></div>
+                <div class="stem-liquid-track">
+                  <div class="stem-liquid" id="liquid-sensor-03" style="height: 50%;">
+                    <div class="meniscus"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="thermometer-bulb">
+                <div class="bulb-liquid" id="bulb-sensor-03">
+                  <div class="bulb-reflection"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="telemetry-readouts">
+            <div class="primary-temp-display">
+              <span class="temp-label">當前溫度</span>
+              <div class="temp-huge-num">
+                <span id="temp-val-sensor-03">--</span>
+                <span class="temp-huge-unit" id="temp-unit-sensor-03">°C</span>
+              </div>
+              <div class="temp-sub-stat">
+                <span>最高: <strong id="max-t-sensor-03">--</strong></span>
+                <span class="divider">|</span>
+                <span>最低: <strong id="min-t-sensor-03">--</strong></span>
+              </div>
+            </div>
+
+            <div class="aux-metrics-grid">
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon hum-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                  </svg>
+                  <span>相對濕度</span>
+                </div>
+                <div class="aux-value" id="hum-val-sensor-03">-- %</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill hum-fill" id="hum-bar-sensor-03" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon volt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="16" height="10" rx="2" ry="2"/>
+                    <line x1="22" y1="11" x2="22" y2="13"/>
+                  </svg>
+                  <span>工作電壓</span>
+                </div>
+                <div class="aux-value" id="volt-val-sensor-03">-- V</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill volt-fill" id="volt-bar-sensor-03" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="history-chart-wrapper">
+          <div class="chart-header">
+            <span class="chart-title">即時溫度趨勢走勢 (近 30 筆)</span>
+            <span class="chart-seq" id="seq-sensor-03">Seq: --</span>
+          </div>
+          <canvas id="chart-sensor-03" class="sparkline-canvas" width="400" height="75"></canvas>
+        </div>
+
+        <div class="card-footer">
+          <span class="update-time" id="time-sensor-03">等待連線封包...</span>
+        </div>
+      </article>
+
+      <!-- Xiaomi 01 (小米溫濕度計) 卡片 -->
+      <article class="sensor-card" id="card-xiaomi-01">
+        <div class="card-header">
+          <div class="device-meta">
+            <div class="device-indicator">
+              <span class="status-pulse-dot" id="dot-xiaomi-01"></span>
+              <span class="device-name">xiaomi-01</span>
+            </div>
+            <span class="status-tag online" id="status-tag-xiaomi-01">ONLINE</span>
+          </div>
+          <div class="alarm-banner" id="alarm-banner-xiaomi-01">
+            <span class="alarm-icon">🔥</span>
+            <span class="alarm-text">高溫告警 (&gt;33°C)</span>
+          </div>
+        </div>
+
+        <div class="thermometer-showcase">
+          <div class="thermometer-wrapper" id="thermo-wrapper-xiaomi-01">
+            <div class="thermometer-glass">
+              <div class="scale-ticks">
+                <div class="scale-mark" style="bottom: 100%"><span class="mark-val">50°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 83.3%"><span class="mark-val">40°</span><span class="tick major"></span></div>
+                <div class="scale-mark alarm-mark" style="bottom: 71.6%"><span class="mark-val alarm-text">33° ⚠</span><span class="tick alarm-tick"></span></div>
+                <div class="scale-mark" style="bottom: 66.6%"><span class="mark-val">30°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 50%"><span class="mark-val">20°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 33.3%"><span class="mark-val">10°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 16.6%"><span class="mark-val">0°</span><span class="tick major"></span></div>
+                <div class="scale-mark" style="bottom: 0%"><span class="mark-val">-10°</span><span class="tick major"></span></div>
+              </div>
+
+              <div class="thermometer-stem">
+                <div class="stem-reflection"></div>
+                <div class="stem-liquid-track">
+                  <div class="stem-liquid" id="liquid-xiaomi-01" style="height: 50%;">
+                    <div class="meniscus"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="thermometer-bulb">
+                <div class="bulb-liquid" id="bulb-xiaomi-01">
+                  <div class="bulb-reflection"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="telemetry-readouts">
+            <div class="primary-temp-display">
+              <span class="temp-label">當前溫度</span>
+              <div class="temp-huge-num">
+                <span id="temp-val-xiaomi-01">--</span>
+                <span class="temp-huge-unit" id="temp-unit-xiaomi-01">°C</span>
+              </div>
+              <div class="temp-sub-stat">
+                <span>最高: <strong id="max-t-xiaomi-01">--</strong></span>
+                <span class="divider">|</span>
+                <span>最低: <strong id="min-t-xiaomi-01">--</strong></span>
+              </div>
+            </div>
+
+            <div class="aux-metrics-grid">
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon hum-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                  </svg>
+                  <span>相對濕度</span>
+                </div>
+                <div class="aux-value" id="hum-val-xiaomi-01">-- %</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill hum-fill" id="hum-bar-xiaomi-01" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="aux-card">
+                <div class="aux-title">
+                  <svg class="aux-icon volt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="16" height="10" rx="2" ry="2"/>
+                    <line x1="22" y1="11" x2="22" y2="13"/>
+                  </svg>
+                  <span>工作電壓</span>
+                </div>
+                <div class="aux-value" id="volt-val-xiaomi-01">-- V</div>
+                <div class="aux-bar-bg">
+                  <div class="aux-bar-fill volt-fill" id="volt-bar-xiaomi-01" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="history-chart-wrapper">
+          <div class="chart-header">
+            <span class="chart-title">即時溫度趨勢走勢 (近 30 筆)</span>
+            <span class="chart-seq" id="seq-xiaomi-01">Seq: --</span>
+          </div>
+          <canvas id="chart-xiaomi-01" class="sparkline-canvas" width="400" height="75"></canvas>
+        </div>
+
+        <div class="card-footer">
+          <span class="update-time" id="time-xiaomi-01">等待連線封包...</span>
+        </div>
+      </article>
+    </main>
+
+    <!-- 底部控制與日誌 -->
+    <footer class="dashboard-footer">
+      <div class="footer-info">
+        <span>已連線至 EMQX 公開 MQTT 伺服器</span>
+        <span class="dot-separator">•</span>
+        <span>感測器規格範圍：-10°C ~ 50°C</span>
+        <span class="dot-separator">•</span>
+        <span>警報閾值：33.0°C</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
