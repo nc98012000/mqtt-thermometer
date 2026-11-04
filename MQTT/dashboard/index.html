@@ -63,6 +63,15 @@
           <span id="sound-text">警報音效</span>
         </button>
 
+        <!-- 訂閱設定按鈕 -->
+        <button id="settings-toggle-btn" class="action-btn" title="修改 MQTT 伺服器與訂閱主題設定">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>訂閱設定</span>
+        </button>
+
         <!-- 重新連線 -->
         <button id="reconnect-btn" class="action-btn action-btn-primary" title="重新連線 MQTT">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -594,6 +603,84 @@
       </div>
     </footer>
   </div>
+
+      <!-- MQTT 訂閱設定彈窗 (Settings Modal) -->
+    <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div class="modal-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 id="settings-title" class="modal-title">MQTT 訂閱與連線設定</h2>
+              <p class="modal-subtitle">即時自訂 MQTT Broker 主機、遙測訂閱前綴與藍牙閘道器 Topic</p>
+            </div>
+          </div>
+          <button id="close-settings-btn" class="modal-close-btn" aria-label="關閉設定">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <!-- MQTT Broker 主機 -->
+          <div class="form-group">
+            <label for="cfg-broker-host" class="form-label">
+              MQTT Broker 伺服器 (WebSocket)
+              <span class="label-desc">預設: broker.emqx.io</span>
+            </label>
+            <input type="text" id="cfg-broker-host" class="form-input" placeholder="broker.emqx.io" />
+          </div>
+
+          <!-- 遙測訂閱前綴 (TOPIC_PREFIX) -->
+          <div class="form-group">
+            <label for="cfg-topic-prefix" class="form-label">
+              標準遙測訂閱前綴 (Topic Prefix)
+              <span class="label-desc">自動訂閱 &lt;前綴&gt;/#，預設: pspasia/test1</span>
+            </label>
+            <input type="text" id="cfg-topic-prefix" class="form-input" placeholder="pspasia/test1" />
+          </div>
+
+          <!-- 閘道器 Raw Topic -->
+          <div class="form-group">
+            <label for="cfg-gateway-topic" class="form-label">
+              TaiwanSensor 閘道器原始廣播 Topic (單次發布)
+              <span class="label-desc">支援萬用字元，預設: ble/+/raw/+</span>
+            </label>
+            <input type="text" id="cfg-gateway-topic" class="form-input" placeholder="ble/+/raw/+" />
+          </div>
+
+          <!-- 目標溫濕度計 MAC -->
+          <div class="form-group">
+            <label for="cfg-xiaomi-mac" class="form-label">
+              小米溫濕度計 MAC 位址
+              <span class="label-desc">不分大小寫與冒號，預設: A4:C1:38:4A:09:DE</span>
+            </label>
+            <input type="text" id="cfg-xiaomi-mac" class="form-input" placeholder="A4:C1:38:4A:09:DE" />
+          </div>
+
+          <!-- 當前訂閱預覽 -->
+          <div class="settings-hint-box">
+            <div class="hint-title">💡 當前作用中的訂閱主題清單：</div>
+            <div id="active-topics-preview" class="hint-topics">--</div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="reset-settings-btn" class="btn-secondary" type="button">恢復預設值</button>
+          <div class="footer-actions-right">
+            <button id="cancel-settings-btn" class="btn-ghost" type="button">取消</button>
+            <button id="save-settings-btn" class="btn-primary" type="button">儲存並重新連線</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
   <script src="app.js"></script>
 </body>

@@ -400,6 +400,11 @@ class ThermometerDashboardApp(tk.Tk):
         # 佇列用於從 MQTT 線程傳遞訊息至 Tkinter 主線程
         self.msg_queue = queue.Queue()
 
+        # 訂閱設定參數
+        self.topic_prefix = TOPIC_PREFIX
+        self.gateway_topic = "ble/+/raw/+"
+        self.target_mac = DEFAULT_MAC
+
         self.cards = {}
         self.setup_ui()
         self.start_mqtt_client()
@@ -423,9 +428,18 @@ class ThermometerDashboardApp(tk.Tk):
                  font=("Microsoft JhengHei", 9),
                  fg=COLOR_TEXT_MUTED, bg="#161b22").pack(anchor="w")
 
-        # 頂部連線狀態徽章
+        # 頂部連線狀態徽章與設定按鈕
         status_box = tk.Frame(nav_frame, bg="#161b22")
         status_box.pack(side="right", padx=20)
+
+        # 訂閱設定按鈕
+        btn_settings = tk.Button(status_box, text="⚙️ 訂閱設定",
+                                 font=("Microsoft JhengHei", 9, "bold"),
+                                 bg="#21262d", fg=COLOR_TEXT_MAIN,
+                                 activebackground="#30363d", activeforeground=COLOR_TEXT_MAIN,
+                                 relief="flat", cursor="hand2", padx=10, pady=4,
+                                 command=self.open_settings_dialog)
+        btn_settings.pack(side="right", padx=6)
 
         self.lbl_mqtt_status = tk.Label(status_box, text="● 連線中...",
                                         font=("JetBrains Mono", 9, "bold"),
@@ -433,10 +447,11 @@ class ThermometerDashboardApp(tk.Tk):
                                         padx=10, pady=4)
         self.lbl_mqtt_status.pack(side="right", padx=8)
 
-        broker_info = f"Broker: {BROKER_HOST} | Topic: {TOPIC_PREFIX}/#"
-        tk.Label(status_box, text=broker_info,
-                 font=("JetBrains Mono", 8),
-                 fg=COLOR_TEXT_MUTED, bg="#161b22").pack(side="right", padx=8)
+        broker_info = f"Broker: {BROKER_HOST} | Topic: {self.topic_prefix}/#"
+        self.lbl_broker_info = tk.Label(status_box, text=broker_info,
+                                        font=("JetBrains Mono", 8),
+                                        fg=COLOR_TEXT_MUTED, bg="#161b22")
+        self.lbl_broker_info.pack(side="right", padx=8)
 
         # 感測器卡片容器 (水平並列所有裝置卡片)
         cards_container = tk.Frame(self, bg=COLOR_BG)
@@ -486,7 +501,7 @@ class ThermometerDashboardApp(tk.Tk):
 
     def on_mqtt_connect(self, client, userdata, flags, reason_code, properties):
         if not reason_code.is_failure:
-            client.subscribe([(f"{TOPIC_PREFIX}/#", 1), ("ble/+/raw/+", 0)])
+            client.subscribe([(f"{self.topic_prefix}/#", 1), (self.gateway_topic, 0)])
             self.msg_queue.put(("system", "connected"))
         else:
             self.msg_queue.put(("system", f"failed: {reason_code}"))
@@ -522,7 +537,7 @@ class ThermometerDashboardApp(tk.Tk):
                     if topic.startswith("ble/") and "/raw/" in topic:
                         parts = topic.split("/")
                         mac_clean = parts[-1].replace(":", "").upper()
-                        target_mac = DEFAULT_MAC.replace(":", "").upper()
+                        target_mac = self.target_mac.replace(":", "").upper()
                         if mac_clean == target_mac and "xiaomi-01" in self.cards:
                             try:
                                 raw_json = json.loads(payload)
@@ -578,6 +593,99 @@ class ThermometerDashboardApp(tk.Tk):
         except Exception:
             pass
         self.destroy()
+
+    def open_settings_dialog(self):
+        """開啟 MQTT 訂閱與主題設定視窗"""
+        dlg = tk.Toplevel(self)
+        dlg.title("MQTT 訂閱設定")
+        dlg.geometry("450x330")
+        dlg.resizable(False, False)
+        dlg.configure(bg=COLOR_CARD_BG)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        pad_opts = {"padx": 20, "pady": 6}
+
+        tk.Label(dlg, text="⚙️ MQTT 訂閱與主題設定",
+                 font=("Microsoft JhengHei", 12, "bold"),
+                 fg=COLOR_TEXT_MAIN, bg=COLOR_CARD_BG).pack(anchor="w", padx=20, pady=(16, 10))
+
+        # 1. 遙測 Topic 前綴
+        f1 = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        f1.pack(fill="x", **pad_opts)
+        tk.Label(f1, text="遙測主題前綴 (自動訂閱 <前綴>/#):",
+                 font=("Microsoft JhengHei", 9), fg=COLOR_TEXT_MUTED, bg=COLOR_CARD_BG).pack(anchor="w")
+        ent_prefix = tk.Entry(f1, font=("JetBrains Mono", 10), bg="#0d1117", fg=COLOR_TEXT_MAIN,
+                              insertbackground="white", relief="solid", bd=1)
+        ent_prefix.insert(0, self.topic_prefix)
+        ent_prefix.pack(fill="x", pady=2)
+
+        # 2. 閘道器 Raw 廣播 Topic
+        f2 = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        f2.pack(fill="x", **pad_opts)
+        tk.Label(f2, text="閘道器 Raw 廣播主題 (單次發布):",
+                 font=("Microsoft JhengHei", 9), fg=COLOR_TEXT_MUTED, bg=COLOR_CARD_BG).pack(anchor="w")
+        ent_gateway = tk.Entry(f2, font=("JetBrains Mono", 10), bg="#0d1117", fg=COLOR_TEXT_MAIN,
+                               insertbackground="white", relief="solid", bd=1)
+        ent_gateway.insert(0, self.gateway_topic)
+        ent_gateway.pack(fill="x", pady=2)
+
+        # 3. 目標小米溫濕度計 MAC
+        f3 = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        f3.pack(fill="x", **pad_opts)
+        tk.Label(f3, text="小米溫濕度計 MAC 位址:",
+                 font=("Microsoft JhengHei", 9), fg=COLOR_TEXT_MUTED, bg=COLOR_CARD_BG).pack(anchor="w")
+        ent_mac = tk.Entry(f3, font=("JetBrains Mono", 10), bg="#0d1117", fg=COLOR_TEXT_MAIN,
+                           insertbackground="white", relief="solid", bd=1)
+        ent_mac.insert(0, self.target_mac)
+        ent_mac.pack(fill="x", pady=2)
+
+        # 按鈕區
+        btn_frame = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        btn_frame.pack(fill="x", padx=20, pady=(16, 12))
+
+        def on_save():
+            new_pfx = ent_prefix.get().strip() or TOPIC_PREFIX
+            new_gw = ent_gateway.get().strip() or "ble/+/raw/+"
+            new_mac = ent_mac.get().strip() or DEFAULT_MAC
+
+            # 退訂舊主題
+            try:
+                self.client.unsubscribe([f"{self.topic_prefix}/#", self.gateway_topic])
+            except Exception:
+                pass
+
+            self.topic_prefix = new_pfx
+            self.gateway_topic = new_gw
+            self.target_mac = new_mac
+
+            # 訂閱新主題
+            try:
+                self.client.subscribe([(f"{self.topic_prefix}/#", 1), (self.gateway_topic, 0)])
+            except Exception:
+                pass
+
+            self.lbl_broker_info.config(text=f"Broker: {BROKER_HOST} | Topic: {self.topic_prefix}/#")
+            dlg.destroy()
+
+        def on_reset():
+            ent_prefix.delete(0, tk.END)
+            ent_prefix.insert(0, TOPIC_PREFIX)
+            ent_gateway.delete(0, tk.END)
+            ent_gateway.insert(0, "ble/+/raw/+")
+            ent_mac.delete(0, tk.END)
+            ent_mac.insert(0, DEFAULT_MAC)
+
+        tk.Button(btn_frame, text="恢復預設", font=("Microsoft JhengHei", 9),
+                  bg="#21262d", fg=COLOR_TEXT_MUTED, relief="flat", cursor="hand2",
+                  padx=10, pady=4, command=on_reset).pack(side="left")
+
+        tk.Button(btn_frame, text="儲存並重新訂閱", font=("Microsoft JhengHei", 9, "bold"),
+                  bg="#1f6feb", fg="#ffffff", relief="flat", cursor="hand2",
+                  padx=12, pady=4, command=on_save).pack(side="right")
+        tk.Button(btn_frame, text="取消", font=("Microsoft JhengHei", 9),
+                  bg="#21262d", fg=COLOR_TEXT_MAIN, relief="flat", cursor="hand2",
+                  padx=10, pady=4, command=dlg.destroy).pack(side="right", padx=6)
 
 
 def main():

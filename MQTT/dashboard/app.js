@@ -6,16 +6,40 @@
 (function () {
   'use strict';
 
-  // --- 設定參數 ---
-  const MQTT_BROKER_HOST = 'broker.emqx.io';
+  // --- 預設與自訂設定參數 ---
+  const DEFAULT_CONFIG = {
+    brokerHost: 'broker.emqx.io',
+    topicPrefix: 'pspasia/test1',
+    gatewayTopic: 'ble/+/raw/+',
+    xiaomiMac: 'A4:C1:38:4A:09:DE'
+  };
+  const CONFIG_STORAGE_KEY = 'mqtt_dashboard_custom_config_v1';
+  let currentConfig = loadStoredConfig();
+
   const MQTT_WS_PATH = '/mqtt';
-  const TOPIC_PREFIX = 'pspasia/test1';
   const DEVICES = ['sensor-01', 'sensor-02', 'sensor-03', 'xiaomi-01'];
   const TEMP_ALARM_THRESHOLD = 33.0; // 攝氏 33 度告警線
 
-  // 閘道器直接廣播的主題（單次發布模式：網頁直接解碼 BTHome V2，省去 Python 橋接）
-  const GATEWAY_RAW_TOPIC = 'ble/+/raw/+';
-  const XIAOMI_MAC_CLEAN = 'A4C1384A09DE';
+  function loadStoredConfig() {
+    try {
+      const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+      if (saved) {
+        return Object.assign({}, DEFAULT_CONFIG, JSON.parse(saved));
+      }
+    } catch (e) {
+      console.warn('載入自訂設定失敗，使用預設值', e);
+    }
+    return Object.assign({}, DEFAULT_CONFIG);
+  }
+
+  function saveStoredConfig(cfg) {
+    currentConfig = Object.assign({}, DEFAULT_CONFIG, cfg);
+    try {
+      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(currentConfig));
+    } catch (e) {
+      console.warn('儲存設定到 localStorage 失敗', e);
+    }
+  }
 
   // 溫度計刻度範圍 (-10°C ~ 50°C)
   const SCALE_MIN_C = -10.0;
@@ -477,10 +501,11 @@
     totalPackets++;
 
     // 1. 攔截閘道器直接發布的 BLE Raw 主題 (單次發布模式)
+    const targetMacClean = (currentConfig.xiaomiMac || 'A4C1384A09DE').replace(/[:-]/g, '').toUpperCase();
     if (topic.startsWith('ble/') && topic.includes('/raw/')) {
       const parts = topic.split('/');
-      const mac = parts[parts.length - 1].replace(/:/g, '').toUpperCase();
-      if (mac === XIAOMI_MAC_CLEAN) {
+      const mac = parts[parts.length - 1].replace(/[:-]/g, '').toUpperCase();
+      if (mac === targetMacClean) {
         handleGatewayRawPayload('xiaomi-01', payloadStr);
       }
       return;
@@ -552,11 +577,15 @@
 
     setConnectionStatus('connecting', '連線中...');
 
+    const brokerHost = currentConfig.brokerHost || 'broker.emqx.io';
+    const prefix = (currentConfig.topicPrefix || 'pspasia/test1').replace(/\/+$/, '');
+    const gatewayTopic = currentConfig.gatewayTopic || 'ble/+/raw/+';
+
     // 若在 https 協定下使用 wss://:8084，若在 http / file 協定下使用 ws://:8083 或 wss://:8084
     const isHttps = window.location.protocol === 'https:';
     const wsPort = isHttps ? 8084 : 8083;
     const wsProtocol = isHttps ? 'wss' : 'ws';
-    const brokerUrl = `${wsProtocol}://${MQTT_BROKER_HOST}:${wsPort}${MQTT_WS_PATH}`;
+    const brokerUrl = `${wsProtocol}://${brokerHost}:${wsPort}${MQTT_WS_PATH}`;
 
     console.log(`正在連線 MQTT: ${brokerUrl}`);
 
@@ -572,11 +601,12 @@
 
       client.on('connect', function () {
         console.log('✅ MQTT 連線成功！');
-        setConnectionStatus('connected', '已連線 (EMQX)');
-        const subscribeTopic = `${TOPIC_PREFIX}/#`;
-        client.subscribe([subscribeTopic, GATEWAY_RAW_TOPIC], { qos: 0 }, function (err) {
+        setConnectionStatus('connected', `已連線 (${brokerHost})`);
+        const telemetryTopic = `${prefix}/#`;
+        const topicsToSub = [telemetryTopic, gatewayTopic];
+        client.subscribe(topicsToSub, { qos: 0 }, function (err) {
           if (!err) {
-            console.log(`✅ 成功訂閱主題: ${subscribeTopic} 與 ${GATEWAY_RAW_TOPIC}`);
+            console.log(`✅ 成功訂閱主題: ${topicsToSub.join(' 與 ')}`);
           } else {
             console.error('❌ 訂閱主題失敗:', err);
           }
@@ -645,6 +675,97 @@
     reconnectBtn.addEventListener('click', function () {
       connectMQTT();
     });
+
+    // --- MQTT 訂閱設定彈窗邏輯 ---
+    initSettingsModal();
+  }
+
+  function initSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    const openBtn = document.getElementById('settings-toggle-btn');
+    const closeBtn = document.getElementById('close-settings-btn');
+    const cancelBtn = document.getElementById('cancel-settings-btn');
+    const saveBtn = document.getElementById('save-settings-btn');
+    const resetBtn = document.getElementById('reset-settings-btn');
+
+    const inputHost = document.getElementById('cfg-broker-host');
+    const inputPrefix = document.getElementById('cfg-topic-prefix');
+    const inputGateway = document.getElementById('cfg-gateway-topic');
+    const inputMac = document.getElementById('cfg-xiaomi-mac');
+    const previewEl = document.getElementById('active-topics-preview');
+
+    function updatePreview() {
+      if (!previewEl) return;
+      const pfx = (inputPrefix.value.trim() || DEFAULT_CONFIG.topicPrefix).replace(/\/+$/, '');
+      const gw = inputGateway.value.trim() || DEFAULT_CONFIG.gatewayTopic;
+      previewEl.textContent = `1. 遙測主題: ${pfx}/# \n2. 閘道主題: ${gw}`;
+    }
+
+    function populateInputs() {
+      if (inputHost) inputHost.value = currentConfig.brokerHost || DEFAULT_CONFIG.brokerHost;
+      if (inputPrefix) inputPrefix.value = currentConfig.topicPrefix || DEFAULT_CONFIG.topicPrefix;
+      if (inputGateway) inputGateway.value = currentConfig.gatewayTopic || DEFAULT_CONFIG.gatewayTopic;
+      if (inputMac) inputMac.value = currentConfig.xiaomiMac || DEFAULT_CONFIG.xiaomiMac;
+      updatePreview();
+    }
+
+    if (openBtn && modal) {
+      openBtn.addEventListener('click', function () {
+        populateInputs();
+        modal.classList.remove('hidden');
+      });
+    }
+
+    function closeModal() {
+      if (modal) modal.classList.add('hidden');
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+    // 點擊背景遮罩關閉
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+    }
+
+    // 即時預覽輸入
+    [inputPrefix, inputGateway].forEach(el => {
+      if (el) el.addEventListener('input', updatePreview);
+    });
+
+    // 儲存設定並重新連線
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function () {
+        const newCfg = {
+          brokerHost: inputHost ? inputHost.value.trim() || DEFAULT_CONFIG.brokerHost : DEFAULT_CONFIG.brokerHost,
+          topicPrefix: inputPrefix ? inputPrefix.value.trim() || DEFAULT_CONFIG.topicPrefix : DEFAULT_CONFIG.topicPrefix,
+          gatewayTopic: inputGateway ? inputGateway.value.trim() || DEFAULT_CONFIG.gatewayTopic : DEFAULT_CONFIG.gatewayTopic,
+          xiaomiMac: inputMac ? inputMac.value.trim().toUpperCase() || DEFAULT_CONFIG.xiaomiMac : DEFAULT_CONFIG.xiaomiMac
+        };
+        saveStoredConfig(newCfg);
+        closeModal();
+        console.log('✅ 已更新 MQTT 訂閱設定：', newCfg);
+        connectMQTT();
+      });
+    }
+
+    // 恢復預設值
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        if (confirm('確定要將 MQTT 訂閱設定恢復為原廠預設值嗎？')) {
+          try {
+            localStorage.removeItem(CONFIG_STORAGE_KEY);
+          } catch (e) {}
+          currentConfig = Object.assign({}, DEFAULT_CONFIG);
+          populateInputs();
+          closeModal();
+          console.log('🔄 已重設為預設 MQTT 設定');
+          connectMQTT();
+        }
+      });
+    }
   }
 
   // --- 啟動初始化 ---
