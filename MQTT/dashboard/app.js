@@ -11,7 +11,9 @@
     brokerHost: 'broker.emqx.io',
     topicPrefix: 'pspasia/test1',
     gatewayTopic: 'ble/+/raw/+',
-    xiaomiMac: 'A4:C1:38:4A:09:DE'
+    xiaomiMac: 'A4:C1:38:4A:09:DE',
+    username: '',
+    password: ''
   };
   const CONFIG_STORAGE_KEY = 'mqtt_dashboard_custom_config_v1';
   let currentConfig = loadStoredConfig();
@@ -590,14 +592,21 @@
     console.log(`正在連線 MQTT: ${brokerUrl}`);
 
     const clientId = `web-dash-${Math.random().toString(16).substring(2, 10)}`;
+    const connectOpts = {
+      clientId: clientId,
+      clean: true,
+      connectTimeout: 8000,
+      reconnectPeriod: 3000,
+    };
+    if (currentConfig.username && currentConfig.username.trim() !== '') {
+      connectOpts.username = currentConfig.username.trim();
+    }
+    if (currentConfig.password && currentConfig.password !== '') {
+      connectOpts.password = currentConfig.password;
+    }
 
     try {
-      client = mqtt.connect(brokerUrl, {
-        clientId: clientId,
-        clean: true,
-        connectTimeout: 8000,
-        reconnectPeriod: 3000,
-      });
+      client = mqtt.connect(brokerUrl, connectOpts);
 
       client.on('connect', function () {
         console.log('✅ MQTT 連線成功！');
@@ -692,6 +701,8 @@
     const inputPrefix = document.getElementById('cfg-topic-prefix');
     const inputGateway = document.getElementById('cfg-gateway-topic');
     const inputMac = document.getElementById('cfg-xiaomi-mac');
+    const inputUser = document.getElementById('cfg-username');
+    const inputPass = document.getElementById('cfg-password');
     const previewEl = document.getElementById('active-topics-preview');
 
     function updatePreview() {
@@ -706,6 +717,8 @@
       if (inputPrefix) inputPrefix.value = currentConfig.topicPrefix || DEFAULT_CONFIG.topicPrefix;
       if (inputGateway) inputGateway.value = currentConfig.gatewayTopic || DEFAULT_CONFIG.gatewayTopic;
       if (inputMac) inputMac.value = currentConfig.xiaomiMac || DEFAULT_CONFIG.xiaomiMac;
+      if (inputUser) inputUser.value = currentConfig.username || '';
+      if (inputPass) inputPass.value = currentConfig.password || '';
       updatePreview();
     }
 
@@ -742,7 +755,9 @@
           brokerHost: inputHost ? inputHost.value.trim() || DEFAULT_CONFIG.brokerHost : DEFAULT_CONFIG.brokerHost,
           topicPrefix: inputPrefix ? inputPrefix.value.trim() || DEFAULT_CONFIG.topicPrefix : DEFAULT_CONFIG.topicPrefix,
           gatewayTopic: inputGateway ? inputGateway.value.trim() || DEFAULT_CONFIG.gatewayTopic : DEFAULT_CONFIG.gatewayTopic,
-          xiaomiMac: inputMac ? inputMac.value.trim().toUpperCase() || DEFAULT_CONFIG.xiaomiMac : DEFAULT_CONFIG.xiaomiMac
+          xiaomiMac: inputMac ? inputMac.value.trim().toUpperCase() || DEFAULT_CONFIG.xiaomiMac : DEFAULT_CONFIG.xiaomiMac,
+          username: inputUser ? inputUser.value.trim() : '',
+          password: inputPass ? inputPass.value : ''
         };
         saveStoredConfig(newCfg);
         closeModal();

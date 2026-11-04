@@ -665,6 +665,24 @@
             <input type="text" id="cfg-xiaomi-mac" class="form-input" placeholder="A4:C1:38:4A:09:DE" />
           </div>
 
+          <!-- MQTT 使用者名稱 (選填) -->
+          <div class="form-group">
+            <label for="cfg-username" class="form-label">
+              MQTT 使用者名稱 (Username)
+              <span class="label-desc">私人 Broker 必填，匿名伺服器留空</span>
+            </label>
+            <input type="text" id="cfg-username" class="form-input" placeholder="留空代表匿名連線" autocomplete="username" />
+          </div>
+
+          <!-- MQTT 密碼 (選填) -->
+          <div class="form-group">
+            <label for="cfg-password" class="form-label">
+              MQTT 密碼 (Password)
+              <span class="label-desc">私人 Broker 必填，匿名伺服器留空</span>
+            </label>
+            <input type="password" id="cfg-password" class="form-input" placeholder="留空代表無密碼" autocomplete="current-password" />
+          </div>
+
           <!-- 當前訂閱預覽 -->
           <div class="settings-hint-box">
             <div class="hint-title">💡 當前作用中的訂閱主題清單：</div>

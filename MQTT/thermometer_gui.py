@@ -404,6 +404,8 @@ class ThermometerDashboardApp(tk.Tk):
         self.topic_prefix = TOPIC_PREFIX
         self.gateway_topic = "ble/+/raw/+"
         self.target_mac = DEFAULT_MAC
+        self.mqtt_username = ""
+        self.mqtt_password = ""
 
         self.cards = {}
         self.setup_ui()
@@ -485,6 +487,9 @@ class ThermometerDashboardApp(tk.Tk):
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"tk-dash-{uuid.uuid4().hex[:8]}"
         )
+        if self.mqtt_username:
+            self.client.username_pw_set(self.mqtt_username, self.mqtt_password or None)
+
         self.client.on_connect = self.on_mqtt_connect
         self.client.on_disconnect = self.on_mqtt_disconnect
         self.client.on_message = self.on_mqtt_message
@@ -598,17 +603,17 @@ class ThermometerDashboardApp(tk.Tk):
         """開啟 MQTT 訂閱與主題設定視窗"""
         dlg = tk.Toplevel(self)
         dlg.title("MQTT 訂閱設定")
-        dlg.geometry("450x330")
+        dlg.geometry("460x450")
         dlg.resizable(False, False)
         dlg.configure(bg=COLOR_CARD_BG)
         dlg.transient(self)
         dlg.grab_set()
 
-        pad_opts = {"padx": 20, "pady": 6}
+        pad_opts = {"padx": 20, "pady": 5}
 
-        tk.Label(dlg, text="⚙️ MQTT 訂閱與主題設定",
+        tk.Label(dlg, text="⚙️ MQTT 訂閱與帳號密碼設定",
                  font=("Microsoft JhengHei", 12, "bold"),
-                 fg=COLOR_TEXT_MAIN, bg=COLOR_CARD_BG).pack(anchor="w", padx=20, pady=(16, 10))
+                 fg=COLOR_TEXT_MAIN, bg=COLOR_CARD_BG).pack(anchor="w", padx=20, pady=(14, 6))
 
         # 1. 遙測 Topic 前綴
         f1 = tk.Frame(dlg, bg=COLOR_CARD_BG)
@@ -640,30 +645,66 @@ class ThermometerDashboardApp(tk.Tk):
         ent_mac.insert(0, self.target_mac)
         ent_mac.pack(fill="x", pady=2)
 
+        # 4. MQTT 使用者名稱 (Username)
+        f4 = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        f4.pack(fill="x", **pad_opts)
+        tk.Label(f4, text="MQTT 使用者名稱 (選填，私人 Broker 必填):",
+                 font=("Microsoft JhengHei", 9), fg=COLOR_TEXT_MUTED, bg=COLOR_CARD_BG).pack(anchor="w")
+        ent_user = tk.Entry(f4, font=("JetBrains Mono", 10), bg="#0d1117", fg=COLOR_TEXT_MAIN,
+                            insertbackground="white", relief="solid", bd=1)
+        ent_user.insert(0, self.mqtt_username)
+        ent_user.pack(fill="x", pady=2)
+
+        # 5. MQTT 密碼 (Password)
+        f5 = tk.Frame(dlg, bg=COLOR_CARD_BG)
+        f5.pack(fill="x", **pad_opts)
+        tk.Label(f5, text="MQTT 密碼 (選填，私人 Broker 必填):",
+                 font=("Microsoft JhengHei", 9), fg=COLOR_TEXT_MUTED, bg=COLOR_CARD_BG).pack(anchor="w")
+        ent_pass = tk.Entry(f5, font=("JetBrains Mono", 10), bg="#0d1117", fg=COLOR_TEXT_MAIN,
+                            insertbackground="white", relief="solid", bd=1, show="*")
+        ent_pass.insert(0, self.mqtt_password)
+        ent_pass.pack(fill="x", pady=2)
+
         # 按鈕區
         btn_frame = tk.Frame(dlg, bg=COLOR_CARD_BG)
-        btn_frame.pack(fill="x", padx=20, pady=(16, 12))
+        btn_frame.pack(fill="x", padx=20, pady=(14, 12))
 
         def on_save():
             new_pfx = ent_prefix.get().strip() or TOPIC_PREFIX
             new_gw = ent_gateway.get().strip() or "ble/+/raw/+"
             new_mac = ent_mac.get().strip() or DEFAULT_MAC
+            new_user = ent_user.get().strip()
+            new_pass = ent_pass.get()
 
-            # 退訂舊主題
-            try:
-                self.client.unsubscribe([f"{self.topic_prefix}/#", self.gateway_topic])
-            except Exception:
-                pass
+            auth_changed = (new_user != self.mqtt_username) or (new_pass != self.mqtt_password)
 
             self.topic_prefix = new_pfx
             self.gateway_topic = new_gw
             self.target_mac = new_mac
+            self.mqtt_username = new_user
+            self.mqtt_password = new_pass
 
-            # 訂閱新主題
-            try:
-                self.client.subscribe([(f"{self.topic_prefix}/#", 1), (self.gateway_topic, 0)])
-            except Exception:
-                pass
+            # 如果帳密改變，需重新設定認證並重連
+            if auth_changed:
+                try:
+                    self.client.disconnect()
+                    if self.mqtt_username:
+                        self.client.username_pw_set(self.mqtt_username, self.mqtt_password or None)
+                    else:
+                        self.client.username_pw_set(None, None)
+                    self.client.connect(BROKER_HOST, BROKER_PORT, keepalive=60)
+                except Exception as e:
+                    print(f"重設認證重連失敗: {e}")
+            else:
+                # 僅主題改變，直接重新訂閱
+                try:
+                    self.client.unsubscribe([f"{self.topic_prefix}/#", self.gateway_topic])
+                except Exception:
+                    pass
+                try:
+                    self.client.subscribe([(f"{self.topic_prefix}/#", 1), (self.gateway_topic, 0)])
+                except Exception:
+                    pass
 
             self.lbl_broker_info.config(text=f"Broker: {BROKER_HOST} | Topic: {self.topic_prefix}/#")
             dlg.destroy()
@@ -675,12 +716,14 @@ class ThermometerDashboardApp(tk.Tk):
             ent_gateway.insert(0, "ble/+/raw/+")
             ent_mac.delete(0, tk.END)
             ent_mac.insert(0, DEFAULT_MAC)
+            ent_user.delete(0, tk.END)
+            ent_pass.delete(0, tk.END)
 
         tk.Button(btn_frame, text="恢復預設", font=("Microsoft JhengHei", 9),
                   bg="#21262d", fg=COLOR_TEXT_MUTED, relief="flat", cursor="hand2",
                   padx=10, pady=4, command=on_reset).pack(side="left")
 
-        tk.Button(btn_frame, text="儲存並重新訂閱", font=("Microsoft JhengHei", 9, "bold"),
+        tk.Button(btn_frame, text="儲存並套用", font=("Microsoft JhengHei", 9, "bold"),
                   bg="#1f6feb", fg="#ffffff", relief="flat", cursor="hand2",
                   padx=12, pady=4, command=on_save).pack(side="right")
         tk.Button(btn_frame, text="取消", font=("Microsoft JhengHei", 9),
